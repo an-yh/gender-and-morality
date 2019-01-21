@@ -1,0 +1,445 @@
+---
+title: "Gender and Morality Study"
+author: "Daniel Yi"
+date: "September 25, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Organizing Data
+```{r}
+library(haven)
+library(tidyr)
+library(lavaan)
+library(psych)
+library(car)
+library(effects)
+library(semTools)
+
+options(max.print = 99999)
+
+gm.ds <- read_sav("~/Research Study/Studies/Religion and Morality Study/g&m (cleaned).sav")
+
+#write.csv(gm.ds, "gm.ds.csv")
+
+# Convenience variables
+careitems <- c(paste0("mfbasic", c(5,6,9)), paste0("pt2mfbasic", c(3,4,5)))
+fairitems <- c(paste0("mfbasic", c(7,13,14)), paste0("pt2mfbasic", c(7,12,16)))
+  inditems <- c(careitems, fairitems)
+groupitems <- c(paste0("mfbasic", c(3,11)), paste0("pt2mfbasic", c(9,10,11)))
+authitems <- c(paste0("mfbasic", c(4,12,15)), paste0("pt2mfbasic", c(6,8,13)))
+pureitems <- c(paste0("mfbasic", c(2,8,10)), paste0("pt2mfbasic", c(1,2,14)))
+  binditems <- c(groupitems, authitems, pureitems)
+
+econitems <- c("mfliberty8", paste0("pt4mfliberty", c(5, 9, 16, 18, 21, 25, 29))) # economic liberty
+  gm.ds$pt4mfliberty18 <- 7-gm.ds$pt4mfliberty18
+  gm.ds$pt4mfliberty25 <- 7-gm.ds$pt4mfliberty25
+lifeitems <- c("mfliberty3", paste0("pt4mfliberty", c(20, 24))) # lifestyle liberty
+  libitems <- c(econitems, lifeitems)
+
+qitems <- paste0("quest_", 1:12)
+  rqitems <- paste0("quest_", 6:7)
+  gm.ds[,paste0("quest", 6:7, "r")] <- gm.ds[, rqitems]
+  gm.ds[rqitems] <- 10 - gm.ds[rqitems]
+
+initems <- paste0("IE_", c(2,4,7,8,10,13,14,15,18,19))
+exitems <- paste0("IE_", c(1,2,5,6,9,11,12,16,17,20))
+
+orthitems <- paste0("Orth_", 1:12)
+
+pcoitems <- paste0("postcrit_", c(2,5,8,10,15))
+pcritems <- paste0("postcrit_", c(6,9,13,14))
+pcsitems <- paste0("postcrit_", c(1,4,7,16))
+pceitems <- paste0("postcrit_", c(3,11,12,17,18))
+  pcitems <- paste0("postcrit_", 1:18)
+
+rfitems <- paste0('RF_',1:12)
+  rrfitems <- paste0('RF_',c(2,4,7,9,10,12))
+  gm.ds[,paste0('RF_',c(2,4,7,9,10,12),'r')] <- gm.ds[,rrfitems]
+  gm.ds[rrfitems] <- 10 - gm.ds[rrfitems]
+
+gm.ds$godm <- NA
+gm.ds$godm[gm.ds$godmasc2 == 1] <- 2
+gm.ds$godm[gm.ds$godmasc3 == 1] <- 3
+gm.ds$godm[gm.ds$godmasc4 == 1] <- 4
+gm.ds$godm[gm.ds$godmasc5 == 1] <- 5
+gm.ds$godm[gm.ds$godmasc6 == 1] <- 6
+gm.ds$godm[gm.ds$godmasc7 == 1] <- 7
+gm.ds$godm[gm.ds$godmasc8 == 1] <- 8
+
+gm.ds$godf <- NA
+gm.ds$godf[gm.ds$godfem1 == 1] <- 1
+gm.ds$godf[gm.ds$godfem2 == 1] <- 2
+gm.ds$godf[gm.ds$godfem3 == 1] <- 3
+gm.ds$godf[gm.ds$godfem4 == 1] <- 4
+gm.ds$godf[gm.ds$godfem5 == 1] <- 5
+gm.ds$godf[gm.ds$godfem6 == 1] <- 6
+gm.ds$godf[gm.ds$godfem7 == 1] <- 7
+gm.ds$godf[gm.ds$godfem8 == 1] <- 8
+
+gm.ds$Polit <- 8 - gm.ds$Polit  # Recode so that 1 = Very Liberal; 7 = Very Conservative
+
+gm.ds$God[gm.ds$God == 3] <- 2  #re-code so 3s become 2
+gm.ds$God <- ifelse(gm.ds$God == 2, 0, 1) #re-code 0=no; 1=yes
+
+# Scale
+gm.ds[,careitems] <- scale(gm.ds[,careitems])
+gm.ds[,fairitems] <- scale(gm.ds[,fairitems])
+gm.ds[,groupitems] <- scale(gm.ds[,groupitems])
+gm.ds[,authitems] <- scale(gm.ds[,authitems])
+gm.ds[,pureitems] <- scale(gm.ds[,pureitems])
+
+gm.ds[,econitems] <- scale(gm.ds[,econitems])
+gm.ds[,lifeitems] <- scale(gm.ds[,lifeitems])
+
+gm.ds[,qitems] <- scale(gm.ds[,qitems])
+gm.ds[,initems] <- scale(gm.ds[,initems])
+gm.ds[,exitems] <- scale(gm.ds[,exitems])
+
+gm.ds[,rfitems] <- scale(gm.ds[,rfitems])
+gm.ds[,orthitems] <- scale(gm.ds[,orthitems])
+gm.ds[,pcitems] <- scale(gm.ds[,pcitems])
+
+gm.ds$godm <- scale(gm.ds$godm)
+gm.ds$godf <- scale(gm.ds$godf)
+
+gm.ds$SESr <- scale(gm.ds$SESr)
+gm.ds$SESc <- scale(gm.ds$SESc)
+
+gm.ds$Relaffil <- scale(gm.ds$Relaffil)
+gm.ds$IFQ <- scale(gm.ds$IFQ)
+gm.ds$Pray <- scale(gm.ds$Pray)
+gm.ds$Attend <- scale(gm.ds$Attend)
+gm.ds$Relinter <- scale(gm.ds$Relinter)
+gm.ds$Religious <- scale(gm.ds$Religious)
+gm.ds$spiritual <- scale(gm.ds$spiritual)
+
+gm.ds$Polit <- scale(gm.ds$Polit)
+
+# Means
+gm.ds$caremean <- rowMeans(gm.ds[,careitems], na.rm = TRUE)
+gm.ds$fairmean <- rowMeans(gm.ds[,fairitems], na.rm = TRUE)
+  gm.ds$indmean <- rowMeans(gm.ds[,inditems], na.rm = TRUE)
+gm.ds$groupmean <- rowMeans(gm.ds[,groupitems], na.rm = TRUE)
+gm.ds$authmean <- rowMeans(gm.ds[,authitems], na.rm = TRUE)
+gm.ds$puremean <- rowMeans(gm.ds[,pureitems], na.rm = TRUE)
+  gm.ds$bindmean <- rowMeans(gm.ds[,binditems], na.rm = TRUE)
+
+gm.ds$econmean <- rowMeans(gm.ds[,econitems])
+gm.ds$lifemean <- rowMeans(gm.ds[,lifeitems], na.rm = TRUE)
+gm.ds$libmean <- rowMeans(gm.ds[, libitems], na.rm = TRUE)
+
+gm.ds$qmean <- rowMeans(gm.ds[,qitems], na.rm = TRUE)
+gm.ds$inmean <- rowMeans(gm.ds[,initems], na.rm=TRUE)
+gm.ds$exmean <- rowMeans(gm.ds[,exitems], na.rm=TRUE)
+
+gm.ds$orthmean <- rowMeans(gm.ds[,orthitems], na.rm=TRUE)
+
+gm.ds$pcomean <- rowMeans(gm.ds[,pcoitems], na.rm = TRUE)
+gm.ds$pcrmean <- rowMeans(gm.ds[,pcritems], na.rm = TRUE)
+gm.ds$pcsmean <- rowMeans(gm.ds[,pcsitems], na.rm = TRUE)
+gm.ds$pcemean <- rowMeans(gm.ds[,pceitems], na.rm = TRUE)
+
+gm.ds$rfmean <- rowMeans(gm.ds[,rfitems], na.rm=TRUE)
+
+# Factor Conditions
+gm.ds$cond <- factor(gm.ds$cond)
+gm.ds$cond <- relevel(gm.ds$cond, ref = "God Female") # Make Female God the reference group
+
+gm.ds$condMG <- ifelse(gm.ds$cond == "God Male", 1, 0)
+gm.ds$condFG <- ifelse(gm.ds$cond == "God Female", 1, 0)
+gm.ds$condFP <- ifelse(gm.ds$cond == "Politician Female", 1, 0)
+gm.ds$condMP <- ifelse(gm.ds$cond == "Politician Male", 1, 0)
+
+gm.ds$Godcond <- ifelse(gm.ds$Godcond == 1, 1, 0)   # Politician regerence group
+
+gm.ds$Sexcond <- ifelse(gm.ds$Sexcond == 1, 1, 0)   # Female reference group
+```
+
+# Demographics
+```{r}
+table(gm.ds$Sex)  # M=81; F=243
+table(gm.ds$year) # Fr=166; So=107; Jr=36; Sr=15
+mean(gm.ds$Age)
+table(gm.ds$Ethnic) # AA/B=15; A/PI=26; H=48; NA=1; C/W=220; etc=14
+table(gm.ds$SESr) # Up=27; Up-Mid=133; Mid=124; Low-Mid=34; Low=6
+table(gm.ds$SESc) # Up=34; Up-Mid=123; Mid=116; Low-Mid=43; Low=8
+table(gm.ds$AreaR) # City=50; Sub=164; city=86; rural=21; idk=3
+table(gm.ds$AreaC) # City=45; Sub=69; city=192; rural=12; idk=6
+table(gm.ds$God)  # Y=288; N=10; U=25
+table(gm.ds$godm) # 1=Very few to 7=Large
+  sum(is.na(gm.ds$godm))  # 14 NAs
+table(gm.ds$godf) # 1=Very few to 7=Large
+  sum(is.na(gm.ds$godf))  # 5 NAs
+table(gm.ds$Relaffil) # 1=Prot; 2=Cath; 4=Hind; 6=Musl; 7=None; 8=Athe; 9=Agno; 10=other
+table(gm.ds$IFQ)  # 1=no overlap; 5=complete overlap
+table(gm.ds$Pray) # 1=Never; 2=Few/year; 3=few/month; 4=few/week; 5=once/day; 6=more/day
+table(gm.ds$Attend) # 1=Never; 2=once/twice/year; 3=several/year; 4=once/twice/month; 5=once/week;6=more/week
+table(gm.ds$Relinter) # 1=Not at all; 9=Extremely
+table(gm.ds$Religious)  # 1=Not at all; 7=Very much
+table(gm.ds$spiritual)  # 1=Not at all; 7=Very much
+table(gm.ds$Polit)  # 1=Very conservative; 7=Very liberal
+```
+
+# Testing correlations between religiosity and MF
+```{r}
+cor.mod <- '
+care =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5
+fair =~ mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+#  ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+group =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11
+auth =~ mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13
+pure =~ mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+#  bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+
+econ =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29
+life =~ mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+#  liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + #pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+quest =~ quest_1 + quest_2 + quest_3 + quest_4 + quest_5 + quest_6 + quest_7 + quest_8 + quest_9 + quest_10 + quest_11 + quest_12
+intr =~ IE_2 + IE_4 + IE_7 + IE_8 + IE_10 + IE_13 + IE_14 + IE_15 + IE_18 + IE_19
+extr =~ IE_1 + IE_2 + IE_5 + IE_6 + IE_9 + IE_11 + IE_12 + IE_16 + IE_17 + IE_20
+
+orth =~ Orth_1 + Orth_2 + Orth_3 + Orth_4 + Orth_5 + Orth_6 + Orth_7 + Orth_8 + Orth_9 + Orth_10 + Orth_11 + Orth_12
+
+pc.orth =~ postcrit_2 + postcrit_5 + postcrit_8 + postcrit_10 + postcrit_15
+pc.rela =~ postcrit_6 + postcrit_9 + postcrit_13 + postcrit_14
+pc.sn =~ postcrit_1 + postcrit_4 + postcrit_7 + postcrit_16
+pc.ec =~ postcrit_3 + postcrit_11 + postcrit_12 + postcrit_17 + postcrit_18
+#post =~ postcrit_1 + postcrit_2 + postcrit_3 + postcrit_4 + postcrit_5 + postcrit_6 + postcrit_7 + postcrit_8 + postcrit_9 + postcrit_10 + postcrit_11 + postcrit_12 + postcrit_13 + postcrit_14 + postcrit_15 + postcrit_16 + postcrit_17 + postcrit_18
+rf =~ RF_1 + RF_2 + RF_3 + RF_4 + RF_5 + RF_6 + RF_7 + RF_8 + RF_9 + RF_10 + RF_11 + RF_12
+
+masc =~ godm
+fem =~ godf
+
+big =~ God
+ifq =~ IFQ
+pray =~ Pray
+attend =~ Attend
+relint =~ Relinter
+relig =~ Religious
+spirit =~ spiritual
+
+pol =~ Polit
+'
+cor.fit <- sem(cor.mod, gm.ds, mimic = "MPlus", meanstructure = T, missing = "fiml", std.lv = T)
+summary(cor.fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+# Testing effects of condition on MF
+## Political Orientation as Moderator
+### Conditions on MF (Female God = Reference group)
+```{r}
+mod <- '
+ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+ind ~ condMG + condMP + condFP + Polit + Polit:condMG + Polit:condMP + Polit:condFP
+bind ~ condMG + a*condMP + condFP + b*Polit + Polit:condMG + w*Polit:condMP + Polit:condFP
+liberty ~ condMG + condMP + condFP + Polit + Polit:condMG + Polit:condMP + Polit:condFP
+
+# Simple effects
+bind.fg.c := a*0 + b*1 + w*0
+bind.fg.l := a*0 + b*(-1) + w*0
+bind.mp.c := a*1 + b*1 + w*1
+bind.mp.l := a*1 + b*(-1) + w*-1
+'
+fit <- sem(mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, missing = "fiml", std.lv = T)
+summary(fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+### Conditions on MF (Politician = Reference group)
+```{r}
+mod <- '
+ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+ind ~ Godcond + Polit + Godcond:Polit
+bind ~ Godcond + Polit + Godcond:Polit
+liberty ~ Godcond + Polit + Godcond:Polit
+'
+fit <- sem(mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, missing = "fiml", std.lv = T)
+summary(fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+### Conditions on MF (Female = Reference group)
+```{r}
+mod <- '
+ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+ind ~ a*Sexcond + b*Polit + u*Sexcond:Polit
+bind ~ c*Sexcond + d*Polit + w*Sexcond:Polit 
+liberty ~ Sexcond + Polit + Sexcond:Polit
+
+# Simple effects
+ind.f.c := a*0 + b*1 + u*0
+ind.f.l := a*0 + b*(-1) + u*0
+ind.m.c := a*1 + b*1 + u*1
+ind.m.l := a*1 + b*(-1) + u*(-1)
+bind.f.c := c*0 + d*1 + w*0
+bind.f.l := c*0 + d*(-1) + w*0
+bind.m.c := c*1 + d*1 + w*1
+bind.m.l := c*1 + d*(-1) + w*(-1)
+bind.m := c*1
+
+# Mean difference
+ind.f.meandiff := ind.f.c - ind.f.l
+ind.m.meandiff := ind.m.c - ind.m.l
+bind.f.meandiff := bind.f.c - bind.f.l
+bind.m.meandiff := bind.m.c - bind.m.l
+'
+fit <- sem(mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, missing = "fiml", std.lv = T)
+summary(fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+## Belief in God as Moderator
+### Conditions on MF (Male Politician = Reference group)
+```{r}
+mod <- '
+ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+ind ~ condMG + condFG + condFP + God + God:condMG + God:condFG + God:condFP
+bind ~ condMG + condFG + condFP + God + God:condMG + God:condFG + God:condFP
+liberty ~ condMG + condFG + condFP + God + God:condMG + God:condFG + God:condFP
+'
+fit <- sem(mod, gm.god, mimic = "Mplus", meanstructure = TRUE, missing = "fiml")
+summary(fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+### Conditions on MF (Politician = Reference group)
+```{r}
+mod <- '
+ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+ind ~ Godcond + God + Godcond:God
+bind ~ Godcond + God + Godcond:God
+liberty ~ Godcond + God + Godcond:God
+'
+fit <- sem(mod, gm.god, mimic = "Mplus", meanstructure = TRUE, missing = "fiml")
+summary(fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+### Conditions on MF (Male = Reference group)
+```{r}
+mod <- '
+ind =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5 + mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+bind =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11 + mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13 + mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+liberty =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29 + mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+
+ind ~ Sexcond + God + Sexcond:God
+bind ~ Sexcond + God + Sexcond:God 
+liberty ~ Sexcond + God + Sexcond:God
+'
+fit <- sem(mod, gm.god, mimic = "Mplus", meanstructure = TRUE, missing = "fiml")
+summary(fit, standardized = TRUE, fit.measure = TRUE)
+```
+
+# Alphas
+```{r}
+care.mod <- '
+care =~ mfbasic5 + mfbasic6 + mfbasic9 + pt2mfbasic3 + pt2mfbasic4 + pt2mfbasic5
+'
+care.fit <- sem(care.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(care.fit)
+
+fair.mod <- '
+fair =~ mfbasic7 + mfbasic13 + mfbasic14 + pt2mfbasic7 + pt2mfbasic12 + pt2mfbasic16
+'
+fair.fit <- sem(fair.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(fair.fit)
+
+group.mod <- '
+group =~ mfbasic3 + mfbasic11 + pt2mfbasic9 + pt2mfbasic10 + pt2mfbasic11
+'
+group.fit <- sem(group.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(group.fit)
+
+auth.mod <- '
+auth =~ mfbasic4 + mfbasic12 + mfbasic15 + pt2mfbasic6 + pt2mfbasic8 + pt2mfbasic13
+'
+auth.fit <- sem(auth.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(auth.fit)
+
+pure.mod <- '
+pure =~ mfbasic2 + mfbasic8 + mfbasic10 + pt2mfbasic1 + pt2mfbasic2 + pt2mfbasic14
+'
+pure.fit <- sem(pure.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(pure.fit)
+
+econ.mod <- '
+econ =~ mfliberty8 + pt4mfliberty5 + pt4mfliberty9 + pt4mfliberty16 + pt4mfliberty18 + pt4mfliberty21 + pt4mfliberty25 + pt4mfliberty29
+'
+econ.fit <- sem(econ.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(econ.fit)
+
+life.mod <- '
+life =~ mfliberty3 + pt4mfliberty20 + pt4mfliberty24
+'
+life.fit <- sem(life.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(life.fit)
+
+quest.mod <- '
+quest =~ quest_1 + quest_2 + quest_3 + quest_4 + quest_5 + quest_6 + quest_7 + quest_8 + quest_9 + quest_10 + quest_11 + quest_12
+'
+quest.fit <- sem(quest.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(quest.fit)
+
+intr.mod <- '
+intr =~ IE_2 + IE_4 + IE_7 + IE_8 + IE_10 + IE_13 + IE_14 + IE_15 + IE_18 + IE_19
+'
+intr.fit <- sem(intr.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(intr.fit)
+
+extr.mod <- '
+extr =~ IE_1 + IE_2 + IE_5 + IE_6 + IE_9 + IE_11 + IE_12 + IE_16 + IE_17 + IE_20
+'
+extr.fit <- sem(extr.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(extr.fit)
+
+orth.mod <- '
+orth =~ Orth_1 + Orth_2 + Orth_3 + Orth_4 + Orth_5 + Orth_6 + Orth_7 + Orth_8 + Orth_9 + Orth_10 + Orth_11 + Orth_12
+'
+orth.fit <- sem(orth.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(orth.fit)
+
+pc.o.mod <- '
+pc.orth =~ postcrit_2 + postcrit_5 + postcrit_8 + postcrit_10 + postcrit_15
+'
+pc.o.fit <- sem(pc.o.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(pc.o.fit)
+
+pc.r.mod <- '
+pc.rela =~ postcrit_6 + postcrit_9 + postcrit_13 + postcrit_14
+'
+pc.r.fit <- sem(pc.r.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(pc.r.fit)
+
+pc.s.mod <- '
+pc.sn =~ postcrit_1 + postcrit_4 + postcrit_7 + postcrit_16
+'
+pc.s.fit <- sem(pc.s.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(pc.s.fit)
+
+pc.e.mod <- '
+pc.ec =~ postcrit_3 + postcrit_11 + postcrit_12 + postcrit_17 + postcrit_18
+'
+pc.e.fit <- sem(pc.e.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(pc.e.fit)
+
+rf.mod <- '
+rf =~ RF_1 + RF_2 + RF_3 + RF_4 + RF_5 + RF_6 + RF_7 + RF_8 + RF_9 + RF_10 + RF_11 + RF_12
+'
+rf.fit <- sem(rf.mod, gm.ds, mimic = "Mplus", meanstructure = TRUE, std.lv = TRUE, missing = "fiml")
+reliability(rf.fit)
+```
